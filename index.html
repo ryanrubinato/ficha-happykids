@@ -784,7 +784,6 @@ async function analisarViaScript(base64, mimeType, docKey) {
     // Solução: chamar direto com fetch normal (Apps Script suporta CORS)
     fetch('https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec', {
       method: 'POST',
-      headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify({action: 'analisar', base64: base64, mimeType: mimeType, docKey: docKey})
     })
     .then(function(r) { return r.json(); })
