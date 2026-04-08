@@ -741,13 +741,6 @@ async function analisarDoc(input, docKey, docNome) {
     ].join(' ');
   }
   try {
-    var response = await fetch('https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec', {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action: 'analisar', base64: base64, mimeType: mediaType, docKey: docKey})
-    });
-    // no-cors nao retorna body - usar proxy via form submit
     var result = await analisarViaScript(base64, mediaType, docKey);
     if (result.aprovado) {
       setStatus(statusEl, 'ok', '&#9989;', docNome + ' aprovado', result.detalhes || 'Documento legivel e dentro dos padroes aceitos.');
