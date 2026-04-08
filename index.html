@@ -211,7 +211,7 @@ select.field-input { cursor: pointer; }
       </div>
       <img class="preview-thumb" id="prev_foto3x4">
       <div class="doc-status" id="status_foto3x4"><div class="doc-status-icon"></div><div class="doc-status-text"><strong></strong><p></p></div></div>
-      <div class="error-msg" id="err_foto3x4">Envie e aguarde a aprovacao da foto 3x4.</div>
+      <div class="error-msg" id="err_foto3x4">Envie a foto 3x4 antes de continuar.</div>
     </div>
     <div class="nav-bar">
       <span></span>
@@ -263,7 +263,7 @@ select.field-input { cursor: pointer; }
       </div>
       <img class="preview-thumb" id="prev_comprovante">
       <div class="doc-status" id="status_comprovante"><div class="doc-status-icon"></div><div class="doc-status-text"><strong></strong><p></p></div></div>
-      <div class="error-msg" id="err_comprovante">Envie e aguarde a aprovacao do comprovante.</div>
+      <div class="error-msg" id="err_comprovante">Envie o comprovante de endereco antes de continuar.</div>
     </div>
     <div class="nav-bar">
       <button class="btn btn-back" onclick="mostrarSec(1)">&#8592; Voltar</button>
@@ -546,7 +546,7 @@ var secFields = {
     {id:'f_nascimento', tipo:'text'},
     {id:'f_estado_civil', tipo:'select'},
     {id:'f_escolaridade', tipo:'select'},
-    {id:'foto3x4', tipo:'doc'}
+    {id:'foto3x4', tipo:'upload'}
   ],
   2: [
     {id:'f_rua', tipo:'text'},
@@ -554,7 +554,7 @@ var secFields = {
     {id:'f_bairro', tipo:'text'},
     {id:'f_cep', tipo:'text'},
     {id:'f_cidade_estado', tipo:'text'},
-    {id:'comprovante', tipo:'doc'}
+    {id:'comprovante', tipo:'upload'}
   ],
   3: [
     {id:'f_celular', tipo:'text'},
@@ -626,6 +626,15 @@ function validarSecao(sec) {
       } else {
         if (errEl) { errEl.classList.remove('show'); }
       }
+    } else if (f.tipo === 'upload') {
+      // Upload obrigatorio mas sem validacao de IA - so verifica se enviou arquivo
+      var errEl = document.getElementById('err_' + f.id);
+      if (!arquivosDoc[f.id]) {
+        if (errEl) { errEl.classList.add('show'); }
+        ok = false;
+      } else {
+        if (errEl) { errEl.classList.remove('show'); }
+      }
     } else {
       var el = document.getElementById(f.id);
       var errEl2 = document.getElementById('err_' + f.id);
@@ -689,6 +698,8 @@ function atualizarBotao() {
 async function analisarDoc(input, docKey, docNome) {
   var file = input.files[0];
   if (!file) return;
+  // Guardar arquivo para envio posterior
+  arquivosDoc[docKey] = file;
   var prev = document.getElementById('prev_' + docKey);
   var zone = document.getElementById('zone_' + docKey);
   if (prev) { prev.src = URL.createObjectURL(file); prev.style.display = 'block'; prev.style.opacity = '1'; }
@@ -730,29 +741,14 @@ async function analisarDoc(input, docKey, docNome) {
     ].join(' ');
   }
   try {
-    var response = await fetch('https://api.anthropic.com/v1/messages', {
+    var response = await fetch('https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec', {
       method: 'POST',
+      mode: 'no-cors',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        messages: [{
-          role: 'user',
-          content: [
-            isPDF
-              ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: base64}}
-              : {type: 'image', source: {type: 'base64', media_type: mediaType, data: base64}},
-            {type: 'text', text: prompt}
-          ]
-        }]
-      })
+      body: JSON.stringify({action: 'analisar', base64: base64, mimeType: mediaType, docKey: docKey})
     });
-    var data = await response.json();
-    var text = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
-    var start = text.indexOf('{');
-    var end2 = text.lastIndexOf('}');
-    if (start === -1 || end2 === -1) throw new Error('JSON nao encontrado');
-    var result = JSON.parse(text.substring(start, end2 + 1));
+    // no-cors nao retorna body - usar proxy via form submit
+    var result = await analisarViaScript(base64, mediaType, docKey);
     if (result.aprovado) {
       setStatus(statusEl, 'ok', '&#9989;', docNome + ' aprovado', result.detalhes || 'Documento legivel e dentro dos padroes aceitos.');
       docsStatus[docKey] = 'ok';
@@ -770,6 +766,41 @@ async function analisarDoc(input, docKey, docNome) {
 }
 
 // Armazena os arquivos selecionados
+async function analisarViaScript(base64, mimeType, docKey) {
+  return new Promise(function(resolve) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec';
+    form.target = 'analise_frame_' + docKey;
+    form.style.display = 'none';
+
+    var iframe = document.createElement('iframe');
+    iframe.name = 'analise_frame_' + docKey;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    document.body.appendChild(form);
+
+    // Usar XMLHttpRequest com JSONP não funciona - usar fetch com cors proxy
+    // Solução: chamar direto com fetch normal (Apps Script suporta CORS)
+    fetch('https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({action: 'analisar', base64: base64, mimeType: mimeType, docKey: docKey})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(result) {
+      document.body.removeChild(iframe);
+      document.body.removeChild(form);
+      resolve(result);
+    })
+    .catch(function() {
+      document.body.removeChild(iframe);
+      document.body.removeChild(form);
+      resolve({aprovado: false, motivo: 'Erro de conexao', detalhes: 'Verifique sua conexao e tente novamente.'});
+    });
+  });
+}
+
 var arquivosDoc = {foto3x4: null, comprovante: null, cpf_doc: null, rg_doc: null, antecedentes: null};
 
 // Sobrescrever analisarDoc para também guardar o arquivo
@@ -836,7 +867,7 @@ async function enviarFormulario() {
     await fetch(SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'x-api-key': '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', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
       body: JSON.stringify(dados)
     });
   } catch(e) {}
