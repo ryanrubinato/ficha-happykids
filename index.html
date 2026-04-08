@@ -767,9 +767,21 @@ async function analisarDoc(input, docKey, docNome) {
 
 // Armazena os arquivos selecionados
 async function analisarViaScript(base64, mimeType, docKey) {
+  // Foto 3x4 e comprovante: aprovar automaticamente se arquivo foi enviado
+  if (docKey === 'foto3x4' || docKey === 'comprovante') {
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        resolve({aprovado: true, motivo: 'ok', detalhes: 'Arquivo recebido com sucesso.'});
+      }, 800);
+    });
+  }
+
+  // Documentos da secao 8 (CPF, RG, antecedentes): validar via API direta
   return new Promise(function(resolve) {
+    var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec';
     var cbName = 'cb_' + docKey + '_' + Date.now();
     var script = document.createElement('script');
+
     var timer = setTimeout(function() {
       delete window[cbName];
       if (script.parentNode) script.parentNode.removeChild(script);
@@ -783,12 +795,22 @@ async function analisarViaScript(base64, mimeType, docKey) {
       resolve(result);
     };
 
-    // Enviar dados via POST com fetch mode no-cors e receber via JSONP GET
-    // Gravar dados no script via parametro encoded
-    var payload = JSON.stringify({action: 'analisar', base64: base64, mimeType: mimeType, docKey: docKey});
-    var encoded = encodeURIComponent(payload);
-    script.src = 'https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec?callback=' + cbName + '&data=' + encoded;
-    document.head.appendChild(script);
+    // Primeiro enviar base64 via POST no-cors, depois buscar resultado via GET
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify({action: 'guardar', base64: base64, mimeType: mimeType, docKey: docKey, cb: cbName})
+    }).then(function() {
+      // Buscar resultado via JSONP
+      setTimeout(function() {
+        script.src = SCRIPT_URL + '?callback=' + cbName + '&cb=' + cbName;
+        document.head.appendChild(script);
+      }, 2000);
+    }).catch(function() {
+      // Se POST falhar, tentar direto
+      script.src = SCRIPT_URL + '?callback=' + cbName + '&cb=' + cbName + '&docKey=' + docKey;
+      document.head.appendChild(script);
+    });
   });
 }
 
