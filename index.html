@@ -768,6 +768,33 @@ async function analisarDoc(input, docKey, docNome) {
 // Armazena os arquivos selecionados
 async function analisarViaScript(base64, mimeType, docKey) {
   return new Promise(function(resolve) {
+    var cbName = 'cb_' + docKey + '_' + Date.now();
+    var script = document.createElement('script');
+    var timer = setTimeout(function() {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve({aprovado: false, motivo: 'Tempo esgotado', detalhes: 'Tente novamente.'});
+    }, 30000);
+
+    window[cbName] = function(result) {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(result);
+    };
+
+    // Enviar dados via POST com fetch mode no-cors e receber via JSONP GET
+    // Gravar dados no script via parametro encoded
+    var payload = JSON.stringify({action: 'analisar', base64: base64, mimeType: mimeType, docKey: docKey});
+    var encoded = encodeURIComponent(payload);
+    script.src = 'https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec?callback=' + cbName + '&data=' + encoded;
+    document.head.appendChild(script);
+  });
+}
+
+// Armazena os arquivos selecionados
+async function analisarViaScript(base64, mimeType, docKey) {
+  return new Promise(function(resolve) {
     var form = document.createElement('form');
     form.method = 'POST';
     form.action = 'https://script.google.com/macros/s/AKfycbxMRwNK04AduVrADInv1fElbVzxQFwUyLEt0oo7Dy0xwyieMdWw0ORMcdxUsHiqs15eAQ/exec';
